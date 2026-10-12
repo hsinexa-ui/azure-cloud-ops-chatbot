@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Azure VM Control Chatbot</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">DEV / TEST OPERATIONS</p>
+        <h1>Azure VM Control Chatbot</h1>
+        <p class="subtitle">A focused control room for your configured development VM.</p>
+      </div>
+      <div class="connection" id="connection-state"><span class="dot"></span> Ready</div>
+    </header>
+
+    <section class="workspace" aria-label="VM chatbot">
+      <div class="chat-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">ASSISTANT</p>
+            <h2>VM conversation</h2>
+          </div>
+          <span class="badge">Azure</span>
+        </div>
+        <div class="messages" id="messages" aria-live="polite">
+          <div class="message bot"><span class="label">BOT</span><p>Tell me to check status, start the VM, or stop it. Stop requests always need confirmation.</p></div>
+        </div>
+        <form class="composer" id="chat-form">
+          <label class="sr-only" for="message-input">Message</label>
+          <input id="message-input" type="text" maxlength="500" placeholder="Ask about the VM..." autocomplete="off" required>
+          <button type="submit" class="send-button">Send <span aria-hidden="true">&#8599;</span></button>
+        </form>
+      </div>
+
+      <aside class="control-panel">
+        <div class="panel-heading"><div><p class="eyebrow">QUICK ACTIONS</p><h2>Controls</h2></div></div>
+        <button class="action-button status-button" data-message="What is the VM status?"><span>01</span> Check status <b>&#8594;</b></button>
+        <button class="action-button start-button" data-message="Start my DEV VM"><span>02</span> Start VM <b>&#8594;</b></button>
+        <button class="action-button stop-button" data-message="Stop my DEV VM"><span>03</span> Stop VM <b>&#8594;</b></button>
+        <div class="safety-note"><strong>Safety first</strong><p>Only the configured DEV or TEST VM can be controlled. Stop always pauses for confirmation.</p></div>
+      </aside>
+    </section>
+    <footer>Azure VM operations are separate from D365 Finance &amp; Operations / LCS environment lifecycle actions.</footer>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
