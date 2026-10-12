@@ -1,0 +1,75 @@
+name: CD
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-ci:
+    name: Verify CI for this commit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: read
+    steps:
+      - name: Require main branch
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::CD can only be run from main."
+          exit 1
+
+      - name: Require successful Python checks
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          conclusion="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs" \
+            --jq '[.check_runs[] | select(.name == "Python checks")] | sort_by(.started_at) | last | .conclusion')"
+          if [[ "$conclusion" != "success" ]]; then
+            echo "::error::The Python checks CI job has not succeeded for ${GITHUB_SHA}."
+            exit 1
+          fi
+
+  deploy:
+    name: Build and deploy backend
+    needs: verify-ci
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: development
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      ACR_NAME: ${{ vars.ACR_NAME }}
+      CONTAINER_APP_NAME: ${{ vars.CONTAINER_APP_NAME }}
+      CONTAINER_APP_RESOURCE_GROUP: ${{ vars.CONTAINER_APP_RESOURCE_GROUP }}
+      IMAGE_NAME: azure-cloud-ops-chatbot
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build container image
+        run: docker build --tag "${IMAGE_NAME}:${GITHUB_SHA}" .
+
+      - name: Sign in to Azure with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Push image and update Container App
+        run: |
+          az config set extension.use_dynamic_install=yes_without_prompt
+          az acr login --name "$ACR_NAME"
+          acr_login_server="$(az acr show --name "$ACR_NAME" --query loginServer --output tsv)"
+          image="${acr_login_server}/${IMAGE_NAME}:${GITHUB_SHA}"
+          docker tag "${IMAGE_NAME}:${GITHUB_SHA}" "$image"
+          docker push "$image"
+          az containerapp update \
+            --name "$CONTAINER_APP_NAME" \
+            --resource-group "$CONTAINER_APP_RESOURCE_GROUP" \
+            --image "$image"

@@ -203,6 +203,40 @@ The CI workflow in `.github/workflows/ci.yml` runs on pushes and pull requests t
 
 To verify CI on GitHub, push a branch and open a pull request targeting `main`, or push directly to `main`. Open the repository's **Actions** tab and check the **CI** workflow run. No repository secrets or Azure-specific workflow configuration are required.
 
+## Continuous Deployment (CD)
+
+The separate `.github/workflows/cd.yml` workflow is deliberately manual: select **CD** in the GitHub Actions tab and choose **Run workflow** on `main`. Before it builds or deploys, it checks that the existing **Python checks** CI job succeeded for that exact commit. Configure a protected GitHub `development` environment with required reviewer approval before using CD. CD does not run on pushes or pull requests.
+
+The workflow builds the FastAPI backend from the repository-root `Dockerfile`, pushes an image tagged with the commit SHA to an existing Azure Container Registry (ACR), then updates an existing Azure Container App. The image listens on port 8000 and runs `backend.main:app` as a non-root user. `.dockerignore` keeps Git metadata, development files, tests, and environment files out of the build context. The frontend is not deployed by this backend workflow; it remains a separate static application and currently points to localhost.
+
+### GitHub configuration
+
+Create a GitHub Actions environment named `development` and configure required reviewers before using CD. Add these non-secret environment variables:
+
+| Variable | Purpose |
+| --- | --- |
+| `AZURE_CLIENT_ID` | Client ID of the Azure federated deployment identity |
+| `AZURE_TENANT_ID` | Microsoft Entra tenant ID |
+| `AZURE_SUBSCRIPTION_ID` | Subscription containing the ACR and Container App |
+| `ACR_NAME` | Name of the existing Azure Container Registry |
+| `CONTAINER_APP_NAME` | Name of the existing Azure Container App |
+| `CONTAINER_APP_RESOURCE_GROUP` | Resource group containing the Container App |
+
+The workflow requests an OIDC token only in its deployment job. No Azure client secret or registry password is stored in GitHub. Avoid echoing credentials or access tokens in workflow commands or logs.
+
+### Azure prerequisites
+
+Provision the Azure resources separately; the workflow does not create them:
+
+1. Create an ACR and an Azure Container Apps environment with an existing Container App configured for ingress on target port `8000`. Configure liveness/readiness HTTP probes on `/health`, port `8000`.
+2. Create a Microsoft Entra deployment identity and federated credential with issuer `https://token.actions.githubusercontent.com`, audience `api://AzureADTokenExchange`, and subject `repo:OWNER/REPOSITORY:environment:development`. Replace the owner and repository with their exact GitHub values.
+3. Grant the deployment identity only the permissions needed to push images to the ACR (for example, `AcrPush`, scoped to that registry) and update the specific Container App. Do not grant subscription-wide Owner or Contributor.
+4. Configure the Container App's registry pull access using its managed identity and grant that identity `AcrPull` on the registry.
+5. Configure the Container App runtime variables `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP`, `AZURE_VM_NAME`, `AZURE_ENVIRONMENT=DEV`, and `ALLOWED_ENVIRONMENTS=DEV,TEST`. Assign the app's managed identity only the VM read/start/deallocate permissions it needs, scoped to the intended DEV/TEST VM or resource group.
+6. Keep ingress private or otherwise restricted to trusted users. This API does not currently implement user authentication and can start or stop the configured VM; do not expose it to the public internet until an authentication and authorization boundary is in place.
+
+The repository's static frontend is not part of this deployment. Its API URL is hard-coded to localhost, and the backend's CORS middleware does not currently use the `FRONTEND_ORIGIN` setting. Hosting the frontend remotely requires a separate frontend-hosting decision and corresponding API URL, CORS, and authentication changes.
+
 ## Troubleshooting
 
 **Authentication failed:** run `az login`, select the right tenant and subscription, then restart the backend. In Azure, verify Managed Identity is enabled and has the required RBAC actions.
