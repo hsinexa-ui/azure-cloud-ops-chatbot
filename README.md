@@ -187,13 +187,21 @@ Each script calls `Connect-AzAccount`, selects the subscription, and verifies th
 
 ## Tests
 
-Tests mock the VM service and cannot start or stop a real VM:
+The test dependencies are included in `requirements.txt`. From the repository root, install dependencies and run the checks with:
 
 ```powershell
-pytest -q
+python -m pip install -r requirements.txt
+python -m compileall -q backend tests
+python -m pytest -q
 ```
 
-The suite covers health, status, start, stop confirmation, cancellation, invalid commands, and safe error responses.
+The suite mocks the VM service and cannot start or stop a real VM. It covers health, status, start, stop confirmation, cancellation, invalid commands, and safe error responses. The compile check catches Python syntax errors, and running pytest also verifies that the test and application imports work.
+
+## GitHub Actions CI
+
+The CI workflow in `.github/workflows/ci.yml` runs on pushes and pull requests targeting `main`. It uses Python 3.11, caches pip downloads, checks Python syntax, and runs the pytest suite. The workflow requires no Azure credentials and does not perform Azure operations; API tests replace the VM service with a fake.
+
+To verify CI on GitHub, push a branch and open a pull request targeting `main`, or push directly to `main`. Open the repository's **Actions** tab and check the **CI** workflow run. No repository secrets or Azure-specific workflow configuration are required.
 
 ## Troubleshooting
 
